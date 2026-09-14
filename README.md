@@ -24,7 +24,9 @@ python main.py
 ### Controls
 
 - Arrow keys: move the cursor around the grid (works even while playing)
-- Space: toggle a note/drum hit on or off at the cursor
+- Space: toggle a note/drum hit on or off at the cursor. Toggling a piano
+  note ON plays a quick preview tone at that note's pitch; toggling OFF
+  and drum rows are silent.
 - `Enter`: start playback from the cursor's beat; press `Enter` again to
   pause. Pausing again and pressing `Enter` resumes from where you left off.
 - `P`: play the sequence from the very beginning (overrides any pause)

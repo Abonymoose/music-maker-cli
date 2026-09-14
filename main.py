@@ -22,6 +22,8 @@ BPM_STEP = 10
 NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 DRUM_LABELS = ["Kick", "Snare"]
 
+PREVIEW_DURATION = 0.15  # seconds, quick preview when toggling a note on
+
 DEFAULT_SAVE_FILE = "song.json"
 
 
@@ -82,6 +84,10 @@ def make_snare(duration):
 
 def step_duration(bpm):
     return 60.0 / bpm / 2  # eighth notes
+
+
+def preview_note(freq):
+    make_tone(freq, PREVIEW_DURATION).play()
 
 
 class Sequencer:
@@ -262,6 +268,9 @@ def main(stdscr):
             seq.cursor_col = (seq.cursor_col + 1) % NUM_STEPS
         elif key == ord(" "):
             seq.toggle()
+            note_on = seq.grid[seq.cursor_row][seq.cursor_col]
+            if note_on and seq.cursor_row < NUM_PIANO_ROWS:
+                preview_note(row_frequency(seq.cursor_row))
         elif key in (curses.KEY_ENTER, 10, 13):
             toggle_play_pause(seq)
         elif key in (ord("p"), ord("P")):
