@@ -10,7 +10,7 @@ import numpy as np
 import pygame
 
 NUM_STEPS = 16
-NUM_PIANO_ROWS = 16
+NUM_PIANO_ROWS = 12
 NUM_DRUM_ROWS = 2
 NUM_ROWS = NUM_PIANO_ROWS + NUM_DRUM_ROWS
 
@@ -26,18 +26,16 @@ DEFAULT_SAVE_FILE = "song.json"
 
 def row_label(row):
     if row < NUM_PIANO_ROWS:
-        # Row 0 = top = highest note. Two octaves, C4..B5.
-        octave = 5 - (row // 12)
-        name = NOTE_NAMES[11 - (row % 12)]
-        return f"{name}{octave}"
+        # Row 0 = top = highest note. Single octave, C4..B4.
+        name = NOTE_NAMES[NUM_PIANO_ROWS - 1 - row]
+        return f"{name}4"
     return DRUM_LABELS[row - NUM_PIANO_ROWS]
 
 
 def row_frequency(row):
     # MIDI note number for C4 = 60.
-    octave = 5 - (row // 12)
-    semitone = 11 - (row % 12)
-    midi = (octave + 1) * 12 + semitone
+    semitone = NUM_PIANO_ROWS - 1 - row
+    midi = 60 + semitone
     return 440.0 * (2 ** ((midi - 69) / 12.0))
 
 
