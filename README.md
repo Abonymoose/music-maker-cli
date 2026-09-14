@@ -23,10 +23,11 @@ python main.py
 
 ### Controls
 
-- Arrow keys: move the cursor around the grid
+- Arrow keys: move the cursor around the grid (works even while playing)
 - Space: toggle a note/drum hit on or off at the cursor
-- `P`: play the sequence from left to right with synthesized sounds
-  (press `Q` or `Esc` during playback to stop early)
+- `Enter`: start playback from the cursor's beat; press `Enter` again to
+  pause. Pausing again and pressing `Enter` resumes from where you left off.
+- `P`: play the sequence from the very beginning (overrides any pause)
 - `+`/`-`: adjust tempo by 10 BPM (default 120)
 - `R`: toggle repeat (loop the song continuously when playing)
 - `S`: save the current pattern to `song.json`

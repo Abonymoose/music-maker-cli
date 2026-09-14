@@ -92,6 +92,8 @@ class Sequencer:
         self.bpm = DEFAULT_BPM
         self.repeat = False
         self.status = ""
+        self.is_playing = False
+        self.play_col = None
 
     def adjust_bpm(self, delta):
         self.bpm = max(MIN_BPM, min(MAX_BPM, self.bpm + delta))
@@ -128,7 +130,7 @@ def build_sounds(duration):
     return sounds
 
 
-def draw(stdscr, seq, playing_col=None):
+def draw(stdscr, seq):
     stdscr.erase()
     max_y, max_x = stdscr.getmaxyx()
 
@@ -147,7 +149,7 @@ def draw(stdscr, seq, playing_col=None):
                 break
             active = seq.grid[row][col]
             is_cursor = (row == seq.cursor_row and col == seq.cursor_col)
-            is_playing = (col == playing_col)
+            is_playing = (col == seq.play_col)
             symbol = "#" if active else "."
             attr = curses.A_NORMAL
             if is_playing:
@@ -163,15 +165,16 @@ def draw(stdscr, seq, playing_col=None):
     info_y = NUM_ROWS + 1
     if info_y < max_y:
         repeat_label = "ON" if seq.repeat else "OFF"
-        info = f"BPM: {seq.bpm}   Repeat: {repeat_label}"
+        play_label = "Playing" if seq.is_playing else "Paused" if seq.play_col is not None else "Stopped"
+        info = f"BPM: {seq.bpm}   Repeat: {repeat_label}   {play_label}"
         stdscr.addstr(info_y, 0, info[: max_x - 1])
 
     help_y = NUM_ROWS + 2
     if help_y < max_y:
         stdscr.addstr(
             help_y, 0,
-            "Arrows: move  Space: toggle  P: play  +/-: tempo  R: repeat"
-            "  S: save  L: load  Q: quit"[: max_x - 1],
+            "Arrows: move  Space: toggle  Enter: play/pause  P: play from start"
+            "  +/-: tempo  R: repeat  S: save  L: load  Q: quit"[: max_x - 1],
         )
     status_y = NUM_ROWS + 3
     if status_y < max_y and seq.status:
@@ -183,30 +186,49 @@ def draw(stdscr, seq, playing_col=None):
     stdscr.refresh()
 
 
-def play(stdscr, seq, sounds):
-    duration = step_duration(seq.bpm)
-    stdscr.timeout(int(duration * 1000))
-    stopped = False
-    while not stopped:
-        for col in range(NUM_STEPS):
-            draw(stdscr, seq, playing_col=col)
-            for row in range(NUM_ROWS):
-                if not seq.grid[row][col]:
-                    continue
-                if row < NUM_PIANO_ROWS:
-                    sounds[row].play()
-                elif row == NUM_PIANO_ROWS:
-                    sounds["kick"].play()
-                else:
-                    sounds["snare"].play()
-            key = stdscr.getch()
-            if key in (ord("q"), ord("Q"), 27):
-                stopped = True
-                break
-        if not seq.repeat:
-            break
-    stdscr.timeout(-1)
-    seq.status = "Playback finished"
+def start_playback(seq, from_col):
+    seq.play_col = from_col
+    seq.is_playing = True
+    seq.status = "Playing"
+
+
+def pause_playback(seq):
+    seq.is_playing = False
+    seq.status = "Paused"
+
+
+def toggle_play_pause(seq):
+    if seq.is_playing:
+        pause_playback(seq)
+    else:
+        start_playback(seq, seq.play_col if seq.play_col is not None else seq.cursor_col)
+
+
+def play_current_step(seq, sounds):
+    col = seq.play_col
+    for row in range(NUM_ROWS):
+        if not seq.grid[row][col]:
+            continue
+        if row < NUM_PIANO_ROWS:
+            sounds[row].play()
+        elif row == NUM_PIANO_ROWS:
+            sounds["kick"].play()
+        else:
+            sounds["snare"].play()
+
+
+def advance_playback(seq, sounds):
+    play_current_step(seq, sounds)
+    next_col = seq.play_col + 1
+    if next_col >= NUM_STEPS:
+        if seq.repeat:
+            next_col = 0
+        else:
+            seq.is_playing = False
+            seq.play_col = None
+            seq.status = "Playback finished"
+            return
+    seq.play_col = next_col
 
 
 def main(stdscr):
@@ -220,9 +242,17 @@ def main(stdscr):
     draw(stdscr, seq)
 
     while True:
+        if seq.is_playing:
+            stdscr.timeout(int(step_duration(seq.bpm) * 1000))
+        else:
+            stdscr.timeout(-1)
+
         key = stdscr.getch()
 
-        if key in (curses.KEY_UP,):
+        if key == -1:
+            if seq.is_playing:
+                advance_playback(seq, sounds)
+        elif key in (curses.KEY_UP,):
             seq.cursor_row = (seq.cursor_row - 1) % NUM_ROWS
         elif key in (curses.KEY_DOWN,):
             seq.cursor_row = (seq.cursor_row + 1) % NUM_ROWS
@@ -232,8 +262,10 @@ def main(stdscr):
             seq.cursor_col = (seq.cursor_col + 1) % NUM_STEPS
         elif key == ord(" "):
             seq.toggle()
+        elif key in (curses.KEY_ENTER, 10, 13):
+            toggle_play_pause(seq)
         elif key in (ord("p"), ord("P")):
-            play(stdscr, seq, sounds)
+            start_playback(seq, 0)
         elif key in (ord("+"), ord("=")):
             seq.adjust_bpm(BPM_STEP)
             sounds = build_sounds(step_duration(seq.bpm))
