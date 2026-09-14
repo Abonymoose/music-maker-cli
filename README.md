@@ -5,10 +5,12 @@ A simple terminal-based step sequencer built with `curses` and `pygame`.
 ## Grid
 
 - The song length is adjustable: `bars` (default 5) × `beats_per_bar`
-  (fixed at 4) = total steps. Only 16 columns are visible at once; the
-  view scrolls horizontally to follow the cursor and the playhead as the
-  song grows past the viewport, so the grid effectively scrolls
-  indefinitely as you add bars.
+  (fixed at 4) = total steps. The visible viewport automatically sizes
+  itself to fit your terminal width, always in multiples of 4 (whole
+  bars) — e.g. an 80-column terminal shows 24 columns at once. The view
+  scrolls horizontally to follow the cursor and the playhead as the song
+  grows past the viewport, so the grid effectively scrolls indefinitely
+  as you add bars.
 - The top 24 rows are piano notes, full chromatic, two octaves (C3 to
   B4, high notes at the top).
 - The bottom 2 rows are drums: kick and snare.

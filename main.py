@@ -19,7 +19,9 @@ NUM_PIANO_ROWS = 24
 NUM_DRUM_ROWS = 2
 NUM_ROWS = NUM_PIANO_ROWS + NUM_DRUM_ROWS
 
-VIEWPORT_WIDTH = 16  # visible columns at once
+LABEL_WIDTH = 5
+CELL_WIDTH = 3
+DEFAULT_VIEWPORT_WIDTH = 16  # used before the terminal size is known
 
 SAMPLE_RATE = 44100
 DEFAULT_BPM = 120
@@ -37,6 +39,15 @@ DEFAULT_SAVE_FILE = "song.json"
 
 def num_steps():
     return SETTINGS["bars"] * SETTINGS["beats_per_bar"]
+
+
+def compute_viewport_width(max_x):
+    """Widest number of columns that fit max_x, rounded down to a multiple
+    of beats_per_bar (so the viewport always shows whole bars)."""
+    multiple = SETTINGS["beats_per_bar"]
+    available = max(multiple, (max_x - LABEL_WIDTH) // CELL_WIDTH)
+    width = (available // multiple) * multiple
+    return min(width, num_steps())
 
 
 def row_label(row):
@@ -108,6 +119,7 @@ class Sequencer:
         self.cursor_row = 0
         self.cursor_col = 0
         self.view_offset = 0
+        self.viewport_width = DEFAULT_VIEWPORT_WIDTH
         self.bpm = DEFAULT_BPM
         self.repeat = False
         self.status = ""
@@ -117,9 +129,9 @@ class Sequencer:
     def scroll_to(self, col):
         if col < self.view_offset:
             self.view_offset = col
-        elif col >= self.view_offset + VIEWPORT_WIDTH:
-            self.view_offset = col - VIEWPORT_WIDTH + 1
-        max_offset = max(0, num_steps() - VIEWPORT_WIDTH)
+        elif col >= self.view_offset + self.viewport_width:
+            self.view_offset = col - self.viewport_width + 1
+        max_offset = max(0, num_steps() - self.viewport_width)
         self.view_offset = max(0, min(self.view_offset, max_offset))
 
     def move_cursor_col(self, delta):
@@ -183,10 +195,13 @@ def draw(stdscr, seq):
     stdscr.erase()
     max_y, max_x = stdscr.getmaxyx()
 
-    label_width = 5
-    cell_width = 3
+    seq.viewport_width = compute_viewport_width(max_x)
+    seq.scroll_to(seq.cursor_col)
+
+    label_width = LABEL_WIDTH
+    cell_width = CELL_WIDTH
     view_start = seq.view_offset
-    view_end = min(num_steps(), view_start + VIEWPORT_WIDTH)
+    view_end = min(num_steps(), view_start + seq.viewport_width)
 
     for row in range(NUM_ROWS):
         y = row
@@ -252,14 +267,17 @@ def draw_settings(stdscr, seq):
     line1 = f"  Bars: {SETTINGS['bars']}   (+/- to adjust)"
     line2 = f"  Beats per bar: {SETTINGS['beats_per_bar']} (fixed)"
     line3 = f"  Total steps: {num_steps()}"
+    line4 = f"  Visible at once: {compute_viewport_width(max_x)} (fits your terminal, multiple of 4)"
     if 2 < max_y:
         stdscr.addstr(2, 0, line1[: max_x - 1])
     if 3 < max_y:
         stdscr.addstr(3, 0, line2[: max_x - 1])
     if 4 < max_y:
         stdscr.addstr(4, 0, line3[: max_x - 1])
-    if 6 < max_y:
-        stdscr.addstr(6, 0, "O or Enter or Esc: back to grid"[: max_x - 1])
+    if 5 < max_y:
+        stdscr.addstr(5, 0, line4[: max_x - 1])
+    if 7 < max_y:
+        stdscr.addstr(7, 0, "O or Enter or Esc: back to grid"[: max_x - 1])
 
     stdscr.refresh()
 
