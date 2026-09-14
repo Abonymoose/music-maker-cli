@@ -4,7 +4,11 @@ A simple terminal-based step sequencer built with `curses` and `pygame`.
 
 ## Grid
 
-- 54 columns represent 54 time steps (beats).
+- The song length is adjustable: `bars` (default 5) × `beats_per_bar`
+  (fixed at 4) = total steps. Only 16 columns are visible at once; the
+  view scrolls horizontally to follow the cursor and the playhead as the
+  song grows past the viewport, so the grid effectively scrolls
+  indefinitely as you add bars.
 - The top 24 rows are piano notes, full chromatic, two octaves (C3 to
   B4, high notes at the top).
 - The bottom 2 rows are drums: kick and snare.
@@ -23,7 +27,8 @@ python main.py
 
 ### Controls
 
-- Arrow keys: move the cursor around the grid (works even while playing)
+- Arrow keys: move the cursor around the grid; the view scrolls to keep
+  the cursor visible (works even while playing)
 - Space: toggle a note/drum hit on or off at the cursor. Toggling a piano
   note ON plays a quick preview tone at that note's pitch; toggling OFF
   and drum rows are silent.
@@ -32,7 +37,10 @@ python main.py
 - `P`: play the sequence from the very beginning (overrides any pause)
 - `+`/`-`: adjust tempo by 10 BPM (default 120)
 - `R`: toggle repeat (loop the song continuously when playing)
-- `S`: save the current pattern to `song.json`
+- `O`: open the settings panel — `+`/`-` there adjusts the number of
+  bars live, resizing the grid (existing notes are kept); `O`, `Enter`,
+  or `Esc` returns to the grid
+- `S`: save the current pattern (and bar count) to `song.json`
 - `L`: load a pattern from `song.json`
 - `Q`: quit
 

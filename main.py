@@ -8,10 +8,18 @@ import sys
 import numpy as np
 import pygame
 
-NUM_STEPS = 54
+SETTINGS = {
+    "bars": 5,
+    "beats_per_bar": 4,  # fixed
+}
+MIN_BARS = 1
+MAX_BARS = 999  # effectively unbounded horizontal scroll
+
 NUM_PIANO_ROWS = 24
 NUM_DRUM_ROWS = 2
 NUM_ROWS = NUM_PIANO_ROWS + NUM_DRUM_ROWS
+
+VIEWPORT_WIDTH = 16  # visible columns at once
 
 SAMPLE_RATE = 44100
 DEFAULT_BPM = 120
@@ -25,6 +33,10 @@ DRUM_LABELS = ["Kick", "Snare"]
 PREVIEW_DURATION = 0.15  # seconds, quick preview when toggling a note on
 
 DEFAULT_SAVE_FILE = "song.json"
+
+
+def num_steps():
+    return SETTINGS["bars"] * SETTINGS["beats_per_bar"]
 
 
 def row_label(row):
@@ -92,14 +104,38 @@ def preview_note(freq):
 
 class Sequencer:
     def __init__(self):
-        self.grid = [[False] * NUM_STEPS for _ in range(NUM_ROWS)]
+        self.grid = [[False] * num_steps() for _ in range(NUM_ROWS)]
         self.cursor_row = 0
         self.cursor_col = 0
+        self.view_offset = 0
         self.bpm = DEFAULT_BPM
         self.repeat = False
         self.status = ""
         self.is_playing = False
         self.play_col = None
+
+    def scroll_to(self, col):
+        if col < self.view_offset:
+            self.view_offset = col
+        elif col >= self.view_offset + VIEWPORT_WIDTH:
+            self.view_offset = col - VIEWPORT_WIDTH + 1
+        max_offset = max(0, num_steps() - VIEWPORT_WIDTH)
+        self.view_offset = max(0, min(self.view_offset, max_offset))
+
+    def move_cursor_col(self, delta):
+        self.cursor_col = max(0, min(num_steps() - 1, self.cursor_col + delta))
+        self.scroll_to(self.cursor_col)
+
+    def resize_to_bars(self, bars):
+        SETTINGS["bars"] = bars
+        length = num_steps()
+        for row in self.grid:
+            if length > len(row):
+                row.extend([False] * (length - len(row)))
+            else:
+                del row[length:]
+        self.cursor_col = min(self.cursor_col, length - 1)
+        self.scroll_to(self.cursor_col)
 
     def adjust_bpm(self, delta):
         self.bpm = max(MIN_BPM, min(MAX_BPM, self.bpm + delta))
@@ -113,15 +149,22 @@ class Sequencer:
         self.grid[self.cursor_row][self.cursor_col] = not self.grid[self.cursor_row][self.cursor_col]
 
     def save(self, path):
+        data = {"bars": SETTINGS["bars"], "grid": self.grid}
         with open(path, "w") as f:
-            json.dump(self.grid, f)
+            json.dump(data, f)
         self.status = f"Saved to {path}"
 
     def load(self, path):
         with open(path) as f:
             data = json.load(f)
-        if len(data) == NUM_ROWS and all(len(row) == NUM_STEPS for row in data):
-            self.grid = [[bool(v) for v in row] for row in data]
+        grid = data.get("grid")
+        bars = data.get("bars", SETTINGS["bars"])
+        length = bars * SETTINGS["beats_per_bar"]
+        if grid and len(grid) == NUM_ROWS and all(len(row) == length for row in grid):
+            SETTINGS["bars"] = bars
+            self.grid = [[bool(v) for v in row] for row in grid]
+            self.cursor_col = min(self.cursor_col, length - 1)
+            self.scroll_to(self.cursor_col)
             self.status = f"Loaded {path}"
         else:
             self.status = "Invalid save file"
@@ -142,6 +185,8 @@ def draw(stdscr, seq):
 
     label_width = 5
     cell_width = 3
+    view_start = seq.view_offset
+    view_end = min(num_steps(), view_start + VIEWPORT_WIDTH)
 
     for row in range(NUM_ROWS):
         y = row
@@ -149,8 +194,8 @@ def draw(stdscr, seq):
             break
         label = row_label(row).rjust(label_width - 1) + " "
         stdscr.addstr(y, 0, label[:label_width])
-        for col in range(NUM_STEPS):
-            x = label_width + col * cell_width
+        for i, col in enumerate(range(view_start, view_end)):
+            x = label_width + i * cell_width
             if x + cell_width > max_x:
                 break
             active = seq.grid[row][col]
@@ -172,15 +217,20 @@ def draw(stdscr, seq):
     if info_y < max_y:
         repeat_label = "ON" if seq.repeat else "OFF"
         play_label = "Playing" if seq.is_playing else "Paused" if seq.play_col is not None else "Stopped"
-        info = f"BPM: {seq.bpm}   Repeat: {repeat_label}   {play_label}"
+        bar_now = seq.cursor_col // SETTINGS["beats_per_bar"] + 1
+        info = (
+            f"BPM: {seq.bpm}   Repeat: {repeat_label}   {play_label}   "
+            f"Bar {bar_now}/{SETTINGS['bars']}   Beats {view_start + 1}-{view_end}/{num_steps()}"
+        )
         stdscr.addstr(info_y, 0, info[: max_x - 1])
 
     help_y = NUM_ROWS + 2
     if help_y < max_y:
         stdscr.addstr(
             help_y, 0,
-            "Arrows: move  Space: toggle  Enter: play/pause  P: play from start"
-            "  +/-: tempo  R: repeat  S: save  L: load  Q: quit"[: max_x - 1],
+            "Arrows: move (view scrolls)  Space: toggle  Enter: play/pause"
+            "  P: play from start  +/-: tempo  R: repeat  O: settings"
+            "  S: save  L: load  Q: quit"[: max_x - 1],
         )
     status_y = NUM_ROWS + 3
     if status_y < max_y and seq.status:
@@ -192,10 +242,33 @@ def draw(stdscr, seq):
     stdscr.refresh()
 
 
+def draw_settings(stdscr, seq):
+    stdscr.erase()
+    max_y, max_x = stdscr.getmaxyx()
+
+    title = " SETTINGS "
+    stdscr.addstr(0, max(0, (max_x - len(title)) // 2), title, curses.A_BOLD | curses.A_REVERSE)
+
+    line1 = f"  Bars: {SETTINGS['bars']}   (+/- to adjust)"
+    line2 = f"  Beats per bar: {SETTINGS['beats_per_bar']} (fixed)"
+    line3 = f"  Total steps: {num_steps()}"
+    if 2 < max_y:
+        stdscr.addstr(2, 0, line1[: max_x - 1])
+    if 3 < max_y:
+        stdscr.addstr(3, 0, line2[: max_x - 1])
+    if 4 < max_y:
+        stdscr.addstr(4, 0, line3[: max_x - 1])
+    if 6 < max_y:
+        stdscr.addstr(6, 0, "O or Enter or Esc: back to grid"[: max_x - 1])
+
+    stdscr.refresh()
+
+
 def start_playback(seq, from_col):
     seq.play_col = from_col
     seq.is_playing = True
     seq.status = "Playing"
+    seq.scroll_to(from_col)
 
 
 def pause_playback(seq):
@@ -226,7 +299,7 @@ def play_current_step(seq, sounds):
 def advance_playback(seq, sounds):
     play_current_step(seq, sounds)
     next_col = seq.play_col + 1
-    if next_col >= NUM_STEPS:
+    if next_col >= num_steps():
         if seq.repeat:
             next_col = 0
         else:
@@ -235,6 +308,7 @@ def advance_playback(seq, sounds):
             seq.status = "Playback finished"
             return
     seq.play_col = next_col
+    seq.scroll_to(next_col)
 
 
 def main(stdscr):
@@ -244,6 +318,7 @@ def main(stdscr):
 
     seq = Sequencer()
     sounds = build_sounds(step_duration(seq.bpm))
+    mode = "grid"  # or "settings"
 
     draw(stdscr, seq)
 
@@ -258,14 +333,21 @@ def main(stdscr):
         if key == -1:
             if seq.is_playing:
                 advance_playback(seq, sounds)
+        elif mode == "settings":
+            if key in (ord("+"), ord("=")):
+                seq.resize_to_bars(min(MAX_BARS, SETTINGS["bars"] + 1))
+            elif key in (ord("-"), ord("_")):
+                seq.resize_to_bars(max(MIN_BARS, SETTINGS["bars"] - 1))
+            elif key in (ord("o"), ord("O"), curses.KEY_ENTER, 10, 13, 27):
+                mode = "grid"
         elif key in (curses.KEY_UP,):
             seq.cursor_row = (seq.cursor_row - 1) % NUM_ROWS
         elif key in (curses.KEY_DOWN,):
             seq.cursor_row = (seq.cursor_row + 1) % NUM_ROWS
         elif key in (curses.KEY_LEFT,):
-            seq.cursor_col = (seq.cursor_col - 1) % NUM_STEPS
+            seq.move_cursor_col(-1)
         elif key in (curses.KEY_RIGHT,):
-            seq.cursor_col = (seq.cursor_col + 1) % NUM_STEPS
+            seq.move_cursor_col(1)
         elif key == ord(" "):
             seq.toggle()
             note_on = seq.grid[seq.cursor_row][seq.cursor_col]
@@ -283,6 +365,8 @@ def main(stdscr):
             sounds = build_sounds(step_duration(seq.bpm))
         elif key in (ord("r"), ord("R")):
             seq.toggle_repeat()
+        elif key in (ord("o"), ord("O")):
+            mode = "settings"
         elif key in (ord("s"), ord("S")):
             seq.save(DEFAULT_SAVE_FILE)
         elif key in (ord("l"), ord("L")):
@@ -293,7 +377,10 @@ def main(stdscr):
         elif key in (ord("q"), ord("Q")):
             break
 
-        draw(stdscr, seq)
+        if mode == "settings":
+            draw_settings(stdscr, seq)
+        else:
+            draw(stdscr, seq)
 
 
 if __name__ == "__main__":
