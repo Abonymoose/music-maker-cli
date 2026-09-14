@@ -4,9 +4,9 @@ A simple terminal-based step sequencer built with `curses` and `pygame`.
 
 ## Grid
 
-- 16 columns represent 16 time steps (beats).
-- The top 12 rows are piano notes, a single octave (C4 to B4, high notes
-  at the top).
+- 18 columns represent 18 time steps (beats).
+- The top 24 rows are piano notes, full chromatic, two octaves (C3 to
+  B4, high notes at the top).
 - The bottom 2 rows are drums: kick and snare.
 
 ## Setup
@@ -26,6 +26,9 @@ python main.py
 - Arrow keys: move the cursor around the grid
 - Space: toggle a note/drum hit on or off at the cursor
 - `P`: play the sequence from left to right with synthesized sounds
+  (press `Q` or `Esc` during playback to stop early)
+- `+`/`-`: adjust tempo by 10 BPM (default 120)
+- `R`: toggle repeat (loop the song continuously when playing)
 - `S`: save the current pattern to `song.json`
 - `L`: load a pattern from `song.json`
 - `Q`: quit

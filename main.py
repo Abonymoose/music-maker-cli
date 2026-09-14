@@ -8,14 +8,16 @@ import sys
 import numpy as np
 import pygame
 
-NUM_STEPS = 16
-NUM_PIANO_ROWS = 12
+NUM_STEPS = 18
+NUM_PIANO_ROWS = 24
 NUM_DRUM_ROWS = 2
 NUM_ROWS = NUM_PIANO_ROWS + NUM_DRUM_ROWS
 
 SAMPLE_RATE = 44100
-BPM = 120
-STEP_DURATION = 60.0 / BPM / 2  # eighth notes
+DEFAULT_BPM = 120
+MIN_BPM = 40
+MAX_BPM = 300
+BPM_STEP = 10
 
 NOTE_NAMES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"]
 DRUM_LABELS = ["Kick", "Snare"]
@@ -25,15 +27,18 @@ DEFAULT_SAVE_FILE = "song.json"
 
 def row_label(row):
     if row < NUM_PIANO_ROWS:
-        # Row 0 = top = highest note. Single octave, C4..B4.
-        return f"{NOTE_NAMES[NUM_PIANO_ROWS - 1 - row]}4"
+        # Row 0 = top = highest note. Two octaves, C3..B4.
+        semitone = NUM_PIANO_ROWS - 1 - row
+        octave = 3 + semitone // 12
+        name = NOTE_NAMES[semitone % 12]
+        return f"{name}{octave}"
     return DRUM_LABELS[row - NUM_PIANO_ROWS]
 
 
 def row_frequency(row):
-    # MIDI note number for C4 = 60.
+    # MIDI note number for C3 = 48.
     semitone = NUM_PIANO_ROWS - 1 - row
-    midi = 60 + semitone
+    midi = 48 + semitone
     return 440.0 * (2 ** ((midi - 69) / 12.0))
 
 
@@ -75,12 +80,26 @@ def make_snare(duration):
     return pygame.sndarray.make_sound(np.ascontiguousarray(stereo))
 
 
+def step_duration(bpm):
+    return 60.0 / bpm / 2  # eighth notes
+
+
 class Sequencer:
     def __init__(self):
         self.grid = [[False] * NUM_STEPS for _ in range(NUM_ROWS)]
         self.cursor_row = 0
         self.cursor_col = 0
+        self.bpm = DEFAULT_BPM
+        self.repeat = False
         self.status = ""
+
+    def adjust_bpm(self, delta):
+        self.bpm = max(MIN_BPM, min(MAX_BPM, self.bpm + delta))
+        self.status = f"BPM: {self.bpm}"
+
+    def toggle_repeat(self):
+        self.repeat = not self.repeat
+        self.status = f"Repeat: {'ON' if self.repeat else 'OFF'}"
 
     def toggle(self):
         self.grid[self.cursor_row][self.cursor_col] = not self.grid[self.cursor_row][self.cursor_col]
@@ -100,12 +119,12 @@ class Sequencer:
             self.status = "Invalid save file"
 
 
-def build_sounds():
+def build_sounds(duration):
     sounds = {}
     for row in range(NUM_PIANO_ROWS):
-        sounds[row] = make_tone(row_frequency(row), STEP_DURATION)
-    sounds["kick"] = make_kick(STEP_DURATION)
-    sounds["snare"] = make_snare(STEP_DURATION)
+        sounds[row] = make_tone(row_frequency(row), duration)
+    sounds["kick"] = make_kick(duration)
+    sounds["snare"] = make_snare(duration)
     return sounds
 
 
@@ -141,10 +160,20 @@ def draw(stdscr, seq, playing_col=None):
             except curses.error:
                 pass
 
-    help_y = NUM_ROWS + 1
+    info_y = NUM_ROWS + 1
+    if info_y < max_y:
+        repeat_label = "ON" if seq.repeat else "OFF"
+        info = f"BPM: {seq.bpm}   Repeat: {repeat_label}"
+        stdscr.addstr(info_y, 0, info[: max_x - 1])
+
+    help_y = NUM_ROWS + 2
     if help_y < max_y:
-        stdscr.addstr(help_y, 0, "Arrows: move  Space: toggle  P: play  S: save  L: load  Q: quit")
-    status_y = NUM_ROWS + 2
+        stdscr.addstr(
+            help_y, 0,
+            "Arrows: move  Space: toggle  P: play  +/-: tempo  R: repeat"
+            "  S: save  L: load  Q: quit"[: max_x - 1],
+        )
+    status_y = NUM_ROWS + 3
     if status_y < max_y and seq.status:
         try:
             stdscr.addstr(status_y, 0, seq.status[: max_x - 1])
@@ -155,19 +184,27 @@ def draw(stdscr, seq, playing_col=None):
 
 
 def play(stdscr, seq, sounds):
-    for col in range(NUM_STEPS):
-        draw(stdscr, seq, playing_col=col)
-        for row in range(NUM_ROWS):
-            if not seq.grid[row][col]:
-                continue
-            if row < NUM_PIANO_ROWS:
-                sounds[row].play()
-            elif row == NUM_PIANO_ROWS:
-                sounds["kick"].play()
-            else:
-                sounds["snare"].play()
-        stdscr.timeout(int(STEP_DURATION * 1000))
-        stdscr.getch()
+    duration = step_duration(seq.bpm)
+    stdscr.timeout(int(duration * 1000))
+    stopped = False
+    while not stopped:
+        for col in range(NUM_STEPS):
+            draw(stdscr, seq, playing_col=col)
+            for row in range(NUM_ROWS):
+                if not seq.grid[row][col]:
+                    continue
+                if row < NUM_PIANO_ROWS:
+                    sounds[row].play()
+                elif row == NUM_PIANO_ROWS:
+                    sounds["kick"].play()
+                else:
+                    sounds["snare"].play()
+            key = stdscr.getch()
+            if key in (ord("q"), ord("Q"), 27):
+                stopped = True
+                break
+        if not seq.repeat:
+            break
     stdscr.timeout(-1)
     seq.status = "Playback finished"
 
@@ -177,8 +214,8 @@ def main(stdscr):
     pygame.mixer.init(frequency=SAMPLE_RATE, size=-16, channels=2)
     pygame.mixer.set_num_channels(NUM_ROWS + 4)
 
-    sounds = build_sounds()
     seq = Sequencer()
+    sounds = build_sounds(step_duration(seq.bpm))
 
     draw(stdscr, seq)
 
@@ -197,6 +234,14 @@ def main(stdscr):
             seq.toggle()
         elif key in (ord("p"), ord("P")):
             play(stdscr, seq, sounds)
+        elif key in (ord("+"), ord("=")):
+            seq.adjust_bpm(BPM_STEP)
+            sounds = build_sounds(step_duration(seq.bpm))
+        elif key in (ord("-"), ord("_")):
+            seq.adjust_bpm(-BPM_STEP)
+            sounds = build_sounds(step_duration(seq.bpm))
+        elif key in (ord("r"), ord("R")):
+            seq.toggle_repeat()
         elif key in (ord("s"), ord("S")):
             seq.save(DEFAULT_SAVE_FILE)
         elif key in (ord("l"), ord("L")):
