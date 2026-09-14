@@ -8,7 +8,7 @@ import sys
 import numpy as np
 import pygame
 
-NUM_STEPS = 22
+NUM_STEPS = 54
 NUM_PIANO_ROWS = 24
 NUM_DRUM_ROWS = 2
 NUM_ROWS = NUM_PIANO_ROWS + NUM_DRUM_ROWS

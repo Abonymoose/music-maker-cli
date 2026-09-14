@@ -4,7 +4,7 @@ A simple terminal-based step sequencer built with `curses` and `pygame`.
 
 ## Grid
 
-- 22 columns represent 22 time steps (beats).
+- 54 columns represent 54 time steps (beats).
 - The top 24 rows are piano notes, full chromatic, two octaves (C3 to
   B4, high notes at the top).
 - The bottom 2 rows are drums: kick and snare.
