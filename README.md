@@ -31,17 +31,19 @@ python main.py
 
 - Arrow keys: move the cursor around the grid; the view scrolls to keep
   the cursor visible (works even while playing)
-- Space: toggle a note/drum hit on or off at the cursor. Toggling a piano
-  note ON plays a quick preview tone at that note's pitch; toggling OFF
-  and drum rows are silent.
+- Space: toggle a note/drum hit on or off at the cursor. Toggling a hit
+  ON plays a quick preview (a sine tone at that note's pitch for piano
+  rows, the actual kick/snare sound for drum rows); toggling OFF is
+  silent.
 - `Enter`: start playback from the cursor's beat; press `Enter` again to
   pause. Pausing again and pressing `Enter` resumes from where you left off.
 - `P`: play the sequence from the very beginning (overrides any pause)
 - `+`/`-`: adjust tempo by 10 BPM (default 120)
 - `R`: toggle repeat (loop the song continuously when playing)
 - `O`: open the settings panel — `+`/`-` there adjusts the number of
-  bars live, resizing the grid (existing notes are kept); `O`, `Enter`,
-  or `Esc` returns to the grid
+  bars live, resizing the grid (existing notes are kept); `F` there
+  fills the song out to however many whole bars fit your current
+  terminal width; `O`, `Enter`, or `Esc` returns to the grid
 - `S`: save the current pattern (and bar count) to `song.json`
 - `L`: load a pattern from `song.json`
 - `Q`: quit

@@ -41,13 +41,16 @@ def num_steps():
     return SETTINGS["bars"] * SETTINGS["beats_per_bar"]
 
 
-def compute_viewport_width(max_x):
+def max_visible_steps(max_x):
     """Widest number of columns that fit max_x, rounded down to a multiple
     of beats_per_bar (so the viewport always shows whole bars)."""
     multiple = SETTINGS["beats_per_bar"]
     available = max(multiple, (max_x - LABEL_WIDTH) // CELL_WIDTH)
-    width = (available // multiple) * multiple
-    return min(width, num_steps())
+    return (available // multiple) * multiple
+
+
+def compute_viewport_width(max_x):
+    return min(max_visible_steps(max_x), num_steps())
 
 
 def row_label(row):
@@ -264,10 +267,11 @@ def draw_settings(stdscr, seq):
     title = " SETTINGS "
     stdscr.addstr(0, max(0, (max_x - len(title)) // 2), title, curses.A_BOLD | curses.A_REVERSE)
 
-    line1 = f"  Bars: {SETTINGS['bars']}   (+/- to adjust)"
+    line1 = f"  Bars: {SETTINGS['bars']}   (+/- to adjust, one bar = {SETTINGS['beats_per_bar']} beats)"
     line2 = f"  Beats per bar: {SETTINGS['beats_per_bar']} (fixed)"
-    line3 = f"  Total steps: {num_steps()}"
-    line4 = f"  Visible at once: {compute_viewport_width(max_x)} (fits your terminal, multiple of 4)"
+    line3 = f"  Total beats: {num_steps()}"
+    line4 = f"  Visible at once: {compute_viewport_width(max_x)} of a possible {max_visible_steps(max_x)} for this terminal"
+    line5 = "  F: fill bars to your screen width"
     if 2 < max_y:
         stdscr.addstr(2, 0, line1[: max_x - 1])
     if 3 < max_y:
@@ -276,8 +280,10 @@ def draw_settings(stdscr, seq):
         stdscr.addstr(4, 0, line3[: max_x - 1])
     if 5 < max_y:
         stdscr.addstr(5, 0, line4[: max_x - 1])
-    if 7 < max_y:
-        stdscr.addstr(7, 0, "O or Enter or Esc: back to grid"[: max_x - 1])
+    if 6 < max_y:
+        stdscr.addstr(6, 0, line5[: max_x - 1])
+    if 8 < max_y:
+        stdscr.addstr(8, 0, "O or Enter or Esc: back to grid"[: max_x - 1])
 
     stdscr.refresh()
 
@@ -356,6 +362,12 @@ def main(stdscr):
                 seq.resize_to_bars(min(MAX_BARS, SETTINGS["bars"] + 1))
             elif key in (ord("-"), ord("_")):
                 seq.resize_to_bars(max(MIN_BARS, SETTINGS["bars"] - 1))
+            elif key in (ord("f"), ord("F")):
+                _, max_x = stdscr.getmaxyx()
+                steps = max_visible_steps(max_x)
+                bars = max(MIN_BARS, steps // SETTINGS["beats_per_bar"])
+                seq.resize_to_bars(bars)
+                seq.status = f"Filled to {bars} bars ({num_steps()} beats)"
             elif key in (ord("o"), ord("O"), curses.KEY_ENTER, 10, 13, 27):
                 mode = "grid"
         elif key in (curses.KEY_UP,):
@@ -369,8 +381,13 @@ def main(stdscr):
         elif key == ord(" "):
             seq.toggle()
             note_on = seq.grid[seq.cursor_row][seq.cursor_col]
-            if note_on and seq.cursor_row < NUM_PIANO_ROWS:
-                preview_note(row_frequency(seq.cursor_row))
+            if note_on:
+                if seq.cursor_row < NUM_PIANO_ROWS:
+                    preview_note(row_frequency(seq.cursor_row))
+                elif seq.cursor_row == NUM_PIANO_ROWS:
+                    sounds["kick"].play()
+                else:
+                    sounds["snare"].play()
         elif key in (curses.KEY_ENTER, 10, 13):
             toggle_play_pause(seq)
         elif key in (ord("p"), ord("P")):
